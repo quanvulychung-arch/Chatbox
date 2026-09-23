@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hội Quán Nét - Diễn đàn Kỹ thuật & Phòng máy</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Top Navigation Bar -->
+    <header class="main-header">
+        <div class="header-container">
+            <div class="logo-area">
+                <a href="#" class="logo-text"><i class="fa-solid fa-gamepad" style="font-size: 24px; color: #1a73e8; margin-right: 6px;"></i> HỘI QUÁN NÉT</a>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="showHelpModal()"><i class="fa-solid fa-circle-question"></i> Lệnh Chat</button>
+                
+                <!-- Auth Container (Changes dynamically based on login state) -->
+                <div id="authHeaderContainer">
+                    <button class="btn btn-primary" onclick="openAuthModal('login')"><i class="fa-solid fa-right-to-bracket"></i> Đăng nhập</button>
+                    <button class="btn btn-outline" onclick="openAuthModal('register')"><i class="fa-solid fa-user-plus"></i> Đăng ký</button>
+                </div>
+            </div>
+        </div>
+        <nav class="sub-navbar">
+            <div class="nav-container">
+                <a href="#" class="nav-item active"><i class="fa-solid fa-comments"></i> Diễn đàn</a>
+                <a href="#" class="nav-item"><i class="fa-solid fa-bolt"></i> Có gì mới</a>
+                <a href="#" class="nav-item"><i class="fa-solid fa-users"></i> Thành viên</a>
+                <a href="#" class="nav-item"><i class="fa-solid fa-server"></i> Bootrom & Game Net</a>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="main-container">
+        
+        <!-- ================= CHATBOX WIDGET ================= -->
+        <section class="chatbox-widget" id="chatboxWidget">
+            <!-- Chatbox Top Header -->
+            <div class="chatbox-header">
+                <div class="cb-header-left">
+                    <span class="cb-icon"><i class="fa-solid fa-comments"></i></span>
+                    <span class="cb-title">Chatbox</span>
+                    <span class="cb-badge" id="onlineCountBadge">0</span>
+                    <a href="javascript:void(0)" class="cb-link-btn" onclick="switchRoom('main')"><i class="fa-solid fa-layer-group"></i> Browse rooms</a>
+                </div>
+                <div class="cb-header-right">
+                    <button class="cb-action-btn" onclick="openUploadModal()"><i class="fa-solid fa-cloud-arrow-up"></i> Up file</button>
+                    <button class="cb-action-btn" onclick="openPrivateChatModal()"><i class="fa-solid fa-user-lock"></i> Chat riêng</button>
+                    <button class="cb-action-btn" onclick="toggleSound()" id="soundToggleBtn" title="Bật/Tắt âm thanh"><i class="fa-solid fa-volume-high"></i></button>
+                    <button class="cb-action-btn" onclick="showHelpModal()" title="Danh sách lệnh"><i class="fa-solid fa-terminal"></i></button>
+                </div>
+            </div>
+
+            <!-- Chatbox Toolbar & Input Area -->
+            <div class="chatbox-input-wrapper">
+                <!-- Formatting Toolbar -->
+                <div class="cb-toolbar">
+                    <button type="button" class="tb-btn" onclick="insertBBCode('b')" title="In đậm [b]"><i class="fa-solid fa-bold"></i></button>
+                    <button type="button" class="tb-btn" onclick="insertBBCode('i')" title="In nghiêng [i]"><i class="fa-solid fa-italic"></i></button>
+                    <button type="button" class="tb-btn" onclick="insertBBCode('u')" title="Gạch chân [u]"><i class="fa-solid fa-underline"></i></button>
+                    <button type="button" class="tb-btn" onclick="insertLinkPrompt()" title="Chèn liên kết [url]"><i class="fa-solid fa-link"></i></button>
+                    <button type="button" class="tb-btn" onclick="insertImagePrompt()" title="Chèn hình ảnh [img]"><i class="fa-regular fa-image"></i></button>
+                    <button type="button" class="tb-btn" onclick="insertQuoteTemplate()" title="Trích dẫn [quote]"><i class="fa-solid fa-quote-left"></i></button>
+                    <button type="button" class="tb-btn" onclick="toggleEmojiPicker()" title="Chèn biểu tượng cảm xúc"><i class="fa-regular fa-face-smile"></i></button>
+                    
+                    <!-- Color Picker dropdown -->
+                    <div class="color-picker-wrapper">
+                        <button type="button" class="tb-btn" title="Chọn màu chữ"><i class="fa-solid fa-palette"></i></button>
+                        <div class="color-palette">
+                            <span style="background: #e74c3c;" onclick="insertColorCode('#e74c3c')"></span>
+                            <span style="background: #e67e22;" onclick="insertColorCode('#e67e22')"></span>
+                            <span style="background: #f1c40f;" onclick="insertColorCode('#f1c40f')"></span>
+                            <span style="background: #2ecc71;" onclick="insertColorCode('#2ecc71')"></span>
+                            <span style="background: #1abc9c;" onclick="insertColorCode('#1abc9c')"></span>
+                            <span style="background: #3498db;" onclick="insertColorCode('#3498db')"></span>
+                            <span style="background: #9b59b6;" onclick="insertColorCode('#9b59b6')"></span>
+                            <span style="background: #e84393;" onclick="insertColorCode('#e84393')"></span>
+                            <span style="background: #2d3436;" onclick="insertColorCode('#2d3436')"></span>
+                        </div>
+                    </div>
+
+                    <div class="current-user-tag" id="currentUserTag">
+                        <span>Chưa đăng nhập</span>
+                    </div>
+                </div>
+
+                <!-- Input box and Submit button -->
+                <form id="chatForm" class="cb-form" onsubmit="handleSendMessage(event)">
+                    <div class="input-container">
+                        <textarea id="chatInput" rows="1" placeholder="Gõ tiếng Việt có dấu, không rao vặt trên chatbox..." autocomplete="off"></textarea>
+                        
+                        <!-- Emoji Picker Dropdown Panel -->
+                        <div class="emoji-picker-panel" id="emojiPickerPanel">
+                            <div class="emoji-grid" id="emojiGrid"></div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-submit" id="submitBtn">
+                        <i class="fa-solid fa-paper-plane"></i> Submit
+                    </button>
+                </form>
+
+                <!-- Pinned Notice Banner (Admin / Notice) -->
+                <div class="cb-notice-banner" id="pinnedNoticeBanner" style="display: none;">
+                    <i class="fa-solid fa-bullhorn"></i>
+                    <span id="pinnedNoticeContent"></span>
+                    <button class="notice-close-btn" onclick="dismissNotice()">&times;</button>
+                </div>
+            </div>
+
+            <!-- Chat Content Body (Newest messages rendered on TOP) -->
+            <div class="chatbox-body">
+                <!-- Messages Stream Area (Newest at top) -->
+                <div class="cb-messages-stream" id="messagesStream"></div>
+
+                <!-- Online Users Sidebar (Right Side - Only real active users) -->
+                <aside class="cb-online-sidebar">
+                    <div class="online-header">
+                        <span><i class="fa-solid fa-circle" style="color: #2ecc71; font-size: 10px;"></i> Đang Online (<span id="onlineCountSide">0</span>)</span>
+                    </div>
+                    <div class="online-users-list" id="onlineUsersList"></div>
+                </aside>
+            </div>
+
+            <!-- Chatbox Footer status bar -->
+            <div class="chatbox-footer">
+                <span id="chatModeStatus"><i class="fa-solid fa-circle-check" style="color: #2ecc71;"></i> Trực tuyến: <span id="modeLabel" class="badge-tag">Hệ thống sẵn sàng</span></span>
+                <span class="cb-tip">Gõ <code>/help</code> để xem hướng dẫn lệnh chat</span>
+            </div>
+        </section>
+
+        <!-- ================= DIỄN ĐÀN / FORUM CATEGORIES ================= -->
+        <section class="forum-category-block">
+            <div class="cat-header">
+                <div class="cat-title"><i class="fa-solid fa-folder-open"></i> Trợ giúp nhau</div>
+            </div>
+            
+            <div class="forum-item-row">
+                <div class="forum-icon">
+                    <i class="fa-regular fa-comments fa-2x"></i>
+                </div>
+                <div class="forum-details">
+                    <a href="javascript:void(0)" class="forum-name">Hỏi đáp & Thảo luận</a>
+                    <div class="forum-desc">Nơi trao đổi kinh nghiệm, đặt câu hỏi và giải đáp mọi thắc mắc về kỹ thuật phòng máy, cấu hình hệ thống và phần mềm bootrom.</div>
+                </div>
+                <div class="forum-stats">
+                    <div><b>0</b> <small>Chủ đề</small></div>
+                    <div><b>0</b> <small>Bài viết</small></div>
+                </div>
+                <div class="forum-latest">
+                    <div class="latest-text">Không có bài viết mới</div>
+                </div>
+            </div>
+
+            <div class="forum-item-row">
+                <div class="forum-icon">
+                    <i class="fa-solid fa-server fa-2x"></i>
+                </div>
+                <div class="forum-details">
+                    <a href="javascript:void(0)" class="forum-name">Hệ thống Bootrom & Máy chủ Game</a>
+                    <div class="forum-desc">Thảo luận về CCBoot, ICafe, NxD, CSM Boot, Diskless và tối ưu hóa Server phòng Net.</div>
+                </div>
+                <div class="forum-stats">
+                    <div><b>128</b> <small>Chủ đề</small></div>
+                    <div><b>1.4k</b> <small>Bài viết</small></div>
+                </div>
+                <div class="forum-latest">
+                    <div class="latest-text">Tối ưu cache SSD cho phòng máy...</div>
+                </div>
+            </div>
+
+            <div class="forum-item-row">
+                <div class="forum-icon">
+                    <i class="fa-solid fa-wrench fa-2x"></i>
+                </div>
+                <div class="forum-details">
+                    <a href="javascript:void(0)" class="forum-name">Phần mềm, Tool & Image Game</a>
+                    <div class="forum-desc">Chia sẻ Image Windows chuẩn phòng nét, script fix lag, menu game và phần mềm tiện ích.</div>
+                </div>
+                <div class="forum-stats">
+                    <div><b>85</b> <small>Chủ đề</small></div>
+                    <div><b>890</b> <small>Bài viết</small></div>
+                </div>
+                <div class="forum-latest">
+                    <div class="latest-text">Share Image Win 11 Super Lite...</div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="footer-container">
+            <p>© 2026 HỘI QUÁN NÉT - Diễn đàn Kỹ thuật & Phòng máy Cyber Game.</p>
+            <div class="footer-links">
+                <a href="javascript:void(0)" onclick="showHelpModal()">Bảng lệnh Chat</a> •
+                <a href="javascript:void(0)">Điều khoản diễn đàn</a> •
+                <a href="javascript:void(0)">Liên hệ Ban Quản Trị</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Auth Modal (Đăng nhập / Đăng ký) -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="authModalTitle"><i class="fa-solid fa-user"></i> Đăng nhập</h3>
+                <button class="modal-close" onclick="closeModal('authModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Tab switch -->
+                <div class="auth-tabs">
+                    <button type="button" class="auth-tab-btn active" id="tabLoginBtn" onclick="switchAuthTab('login')">Đăng nhập</button>
+                    <button type="button" class="auth-tab-btn" id="tabRegisterBtn" onclick="switchAuthTab('register')">Đăng ký thành viên</button>
+                </div>
+
+                <form id="authForm" onsubmit="handleAuthSubmit(event)">
+                    <div class="form-group">
+                        <label>Tên tài khoản (Tên hiển thị):</label>
+                        <input type="text" id="authUsername" class="form-control" placeholder="Nhập tên tài khoản..." required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label>Mật khẩu:</label>
+                        <input type="password" id="authPassword" class="form-control" placeholder="Nhập mật khẩu..." required autocomplete="current-password">
+                    </div>
+                    <div class="form-group" id="confirmPassGroup" style="display: none;">
+                        <label>Xác nhận lại mật khẩu:</label>
+                        <input type="password" id="authPasswordConfirm" class="form-control" placeholder="Nhập lại mật khẩu...">
+                    </div>
+                    <div class="form-group" id="userColorGroup" style="display: none;">
+                        <label>Màu tên bạn yêu thích:</label>
+                        <div class="color-select-row">
+                            <input type="color" id="authColor" value="#006699">
+                            <span id="authColorPreview">#006699</span>
+                        </div>
+                    </div>
+                    <div class="auth-error-msg" id="authErrorMsg" style="display: none;"></div>
+                    <button type="submit" class="btn btn-primary btn-block" id="authSubmitBtn" style="margin-top: 15px; width: 100%; justify-content: center;">
+                        Đăng nhập
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help & Command Cheatsheet Modal -->
+    <div class="modal-overlay" id="helpModal">
+        <div class="modal-box modal-lg">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-terminal"></i> Bảng Lệnh Chat & Quản trị Chatbox</h3>
+                <button class="modal-close" onclick="closeModal('helpModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Bạn có thể nhập trực tiếp các lệnh sau vào ô chatbox và nhấn <b>Submit</b> hoặc phím <b>Enter</b>:</p>
+                <div class="command-table-wrapper">
+                    <table class="cmd-table">
+                        <thead>
+                            <tr>
+                                <th>Lệnh (Command)</th>
+                                <th>Quyền hạn</th>
+                                <th>Mô tả tác dụng</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="cmd-admin-row">
+                                <td><code>/clear</code> hoặc <code>/cls</code></td>
+                                <td><span class="badge badge-admin">Admin</span></td>
+                                <td><b>Xóa sạch toàn bộ lịch sử tin nhắn</b> ngay lập tức</td>
+                            </tr>
+                            <tr class="cmd-admin-row">
+                                <td><code>/notice &lt;nội dung&gt;</code></td>
+                                <td><span class="badge badge-admin">Admin</span></td>
+                                <td>Ghim thanh thông báo nổi bật trên đầu chatbox (gõ <code>/notice</code> để tắt)</td>
+                            </tr>
+                            <tr class="cmd-admin-row">
+                                <td><code>/ban &lt;@tên_người_dùng&gt;</code></td>
+                                <td><span class="badge badge-admin">Admin</span></td>
+                                <td>Khóa quyền gửi tin nhắn của một thành viên</td>
+                            </tr>
+                            <tr class="cmd-admin-row">
+                                <td><code>/unban &lt;@tên_người_dùng&gt;</code></td>
+                                <td><span class="badge badge-admin">Admin</span></td>
+                                <td>Mở khóa chat cho thành viên</td>
+                            </tr>
+                            <tr class="cmd-admin-row">
+                                <td><code>/prune &lt;số_lượng&gt;</code></td>
+                                <td><span class="badge badge-admin">Admin</span></td>
+                                <td>Chỉ giữ lại N tin nhắn mới nhất (VD: <code>/prune 20</code>)</td>
+                            </tr>
+                            <tr>
+                                <td><code>/color &lt;mã_màu&gt;</code></td>
+                                <td><span class="badge badge-member">Thành viên</span></td>
+                                <td>Đổi màu tên hiển thị (VD: <code>/color #e74c3c</code>)</td>
+                            </tr>
+                            <tr>
+                                <td><code>/me &lt;hành_động&gt;</code></td>
+                                <td><span class="badge badge-member">Thành viên</span></td>
+                                <td>Gửi tin nhắn dạng thông báo hành động</td>
+                            </tr>
+                            <tr>
+                                <td><code>/help</code></td>
+                                <td><span class="badge badge-member">Thành viên</span></td>
+                                <td>Mở bảng hướng dẫn này</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="note-box">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <div>
+                        <b>Quyền Quản trị viên (Admin):</b>
+                        <p>Đăng nhập bằng tài khoản <code>admin</code> với mật khẩu mặc định <code>admin123</code>. Tài khoản Admin sẽ có huy hiệu vương miện đỏ và toàn quyền thực hiện các lệnh xóa / quản trị.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('helpModal')">Đã hiểu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Image Modal -->
+    <div class="modal-overlay" id="uploadModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-cloud-arrow-up"></i> Tải ảnh lên Chatbox</h3>
+                <button class="modal-close" onclick="closeModal('uploadModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Cách 1: Nhập link ảnh trực tiếp (URL):</label>
+                    <input type="text" id="directImageUrl" class="form-control" placeholder="https://example.com/image.png">
+                </div>
+                <div class="form-group">
+                    <label>Cách 2: Chọn ảnh từ máy tính:</label>
+                    <input type="file" id="localFileInput" class="form-control" accept="image/*" onchange="previewLocalImage(event)">
+                </div>
+                <div id="imagePreviewContainer" style="display:none; text-align: center; margin-top: 10px;">
+                    <img id="imagePreview" src="" style="max-width: 100%; max-height: 180px; border-radius: 4px; border: 1px solid #ccc;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('uploadModal')">Đóng</button>
+                <button class="btn btn-success" onclick="confirmUploadImage()"><i class="fa-solid fa-check"></i> Chèn vào Chatbox</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Effects for Notification -->
+    <audio id="chatNotifySound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+    </audio>
+
+    <!-- Cloud Realtime Sync Library (MQTT over Secure WebSocket) -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+
+    <!-- Scripts -->
+    <script src="chat.js"></script>
+</body>
+</html>
