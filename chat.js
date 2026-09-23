@@ -1,10 +1,10 @@
 /**
- * HỘI QUÁN NÉT - CHATBOX CORE ENGINE (V3.0)
- * - Mượt mà, sạch sẽ, không lộ thông tin phụ
- * - Realtime Cloud WebSocket kết nối đồng thời mọi trình duyệt và thiết bị
+ * HỘI QUÁN NÉT - CHATBOX CORE ENGINE (V3.1 - Cloud History Retention & Sync)
+ * - Tự động tải và đồng bộ toàn bộ lịch sử tin nhắn cho người mới vào
+ * - MQTT Retained Cloud Storage + Peer State Gossip
  * - Tin nhắn mới nhất nằm ở TRÊN CÙNG
- * - Đăng ký / Đăng nhập thành viên mượt mà (Admin bảo mật)
- * - Đầy đủ lệnh quản trị: /clear, /notice, /ban, /unban, /prune
+ * - Đăng ký / Đăng nhập thành viên
+ * - Đầy đủ lệnh quản trị: /clear (xóa sạch đám mây), /notice, /ban, /unban, /prune
  */
 
 // Global State
@@ -17,8 +17,10 @@ let bannedUsers = new Set();
 let mqttClient = null;
 const CLIENT_ID = 'hqn_' + Math.random().toString(36).substr(2, 9);
 
-// MQTT Topics for Hoi Quan Net
+// MQTT Topics
 const TOPIC_MESSAGES = 'hoiquannet_global_chat_v3/messages';
+const TOPIC_HISTORY = 'hoiquannet_global_chat_v3/history'; // Retained Cloud Storage
+const TOPIC_SYNC = 'hoiquannet_global_chat_v3/sync'; // P2P Peer Sync
 const TOPIC_PRESENCE = 'hoiquannet_global_chat_v3/presence';
 const TOPIC_ADMIN = 'hoiquannet_global_chat_v3/admin';
 
@@ -71,7 +73,7 @@ function initUserAccounts() {
         }
     }
 
-    // Default Admin Account (Protected)
+    // Default Admin Account
     if (!registeredUsers['admin']) {
         registeredUsers['admin'] = {
             username: 'Admin',
@@ -267,9 +269,9 @@ function setupColorPicker() {
     }
 }
 
-// ================= REALTIME ENGINE (MQTT CLOUD WEBSOCKET) =================
+// ================= REALTIME ENGINE WITH CLOUD STORAGE =================
 function initRealtimeEngine() {
-    // 1. Load cached local messages
+    // 1. Load cached local messages first
     const cached = localStorage.getItem('hoiquannet_clean_messages');
     if (cached) {
         try {
@@ -278,6 +280,7 @@ function initRealtimeEngine() {
             messagesList = [];
         }
     }
+    renderMessages();
 
     // 2. Connect to Public High-Speed Secure MQTT WebSocket Broker
     if (typeof mqtt !== 'undefined') {
@@ -299,10 +302,15 @@ function initRealtimeEngine() {
                     modeLabel.style.color = "#166534";
                 }
 
-                // Subscribe to topics
-                mqttClient.subscribe(TOPIC_MESSAGES);
-                mqttClient.subscribe(TOPIC_PRESENCE);
-                mqttClient.subscribe(TOPIC_ADMIN);
+                // Subscribe to all topics (including RETAINED HISTORY)
+                mqttClient.subscribe(TOPIC_MESSAGES, { qos: 1 });
+                mqttClient.subscribe(TOPIC_HISTORY, { qos: 1 });
+                mqttClient.subscribe(TOPIC_SYNC, { qos: 1 });
+                mqttClient.subscribe(TOPIC_PRESENCE, { qos: 0 });
+                mqttClient.subscribe(TOPIC_ADMIN, { qos: 1 });
+
+                // Request Peer Sync from live active clients
+                requestPeerHistorySync();
 
                 // Announce presence immediately
                 sendPresenceHeartbeat();
@@ -310,7 +318,9 @@ function initRealtimeEngine() {
 
             mqttClient.on('message', (topic, message) => {
                 try {
-                    const data = JSON.parse(message.toString());
+                    const text = message.toString();
+                    if (!text) return;
+                    const data = JSON.parse(text);
                     handleIncomingCloudData(topic, data);
                 } catch (e) {
                     console.error('MQTT payload parse error:', e);
@@ -324,19 +334,45 @@ function initRealtimeEngine() {
             console.warn('MQTT Init fallback:', err);
         }
     }
-
-    renderMessages();
 }
 
 function handleIncomingCloudData(topic, data) {
-    if (topic === TOPIC_MESSAGES) {
+    if (topic === TOPIC_HISTORY) {
+        // Cloud Retained History Loaded!
+        if (data && Array.isArray(data.messages)) {
+            // Update messages list if cloud has more or fresher content
+            mergeCloudHistory(data.messages);
+            if (data.notice) showNotice(data.notice);
+        }
+    } else if (topic === TOPIC_MESSAGES) {
         const { action, payload } = data;
         if (action === 'NEW_MESSAGE') {
             if (!messagesList.some(m => m.id === payload.id)) {
                 messagesList.push(payload);
+                if (messagesList.length > 100) messagesList = messagesList.slice(-100);
                 localStorage.setItem('hoiquannet_clean_messages', JSON.stringify(messagesList));
                 renderMessages();
                 playNotifySound();
+            }
+        }
+    } else if (topic === TOPIC_SYNC) {
+        const { action, senderId, targetId, messages, notice } = data;
+        if (action === 'REQUEST_HISTORY' && senderId !== CLIENT_ID) {
+            // Another peer asked for history, send them our current messages if we have any
+            if (messagesList.length > 0) {
+                const packet = JSON.stringify({
+                    action: 'PROVIDE_HISTORY',
+                    senderId: CLIENT_ID,
+                    targetId: senderId,
+                    messages: messagesList,
+                    notice: document.getElementById('pinnedNoticeContent').innerHTML || ''
+                });
+                mqttClient.publish(TOPIC_SYNC, packet);
+            }
+        } else if (action === 'PROVIDE_HISTORY' && targetId === CLIENT_ID) {
+            if (Array.isArray(messages) && messages.length > 0) {
+                mergeCloudHistory(messages);
+                if (notice) showNotice(notice);
             }
         }
     } else if (topic === TOPIC_PRESENCE) {
@@ -361,17 +397,54 @@ function handleIncomingCloudData(topic, data) {
     }
 }
 
+function mergeCloudHistory(incomingMessages) {
+    if (!Array.isArray(incomingMessages)) return;
+
+    const existingMap = new Map();
+    messagesList.forEach(m => existingMap.set(m.id, m));
+    incomingMessages.forEach(m => existingMap.set(m.id, m));
+
+    messagesList = Array.from(existingMap.values());
+    if (messagesList.length > 100) {
+        messagesList = messagesList.slice(-100);
+    }
+
+    localStorage.setItem('hoiquannet_clean_messages', JSON.stringify(messagesList));
+    renderMessages();
+}
+
+function requestPeerHistorySync() {
+    if (mqttClient && mqttClient.connected) {
+        const packet = JSON.stringify({ action: 'REQUEST_HISTORY', senderId: CLIENT_ID });
+        mqttClient.publish(TOPIC_SYNC, packet);
+    }
+}
+
+function syncFullHistoryToCloud() {
+    if (mqttClient && mqttClient.connected) {
+        const noticeText = document.getElementById('pinnedNoticeContent').innerHTML || '';
+        const historyPacket = JSON.stringify({
+            messages: messagesList,
+            notice: noticeText,
+            timestamp: Date.now()
+        });
+
+        // Publish with retain: true so any newly entering visitor gets the full history immediately
+        mqttClient.publish(TOPIC_HISTORY, historyPacket, { retain: true, qos: 1 });
+    }
+}
+
 function broadcastCloudMessage(action, payload) {
     if (mqttClient && mqttClient.connected) {
         const packet = JSON.stringify({ action, payload, senderId: CLIENT_ID });
-        mqttClient.publish(TOPIC_MESSAGES, packet);
+        mqttClient.publish(TOPIC_MESSAGES, packet, { qos: 1 });
     }
 }
 
 function broadcastAdminAction(action, payload) {
     if (mqttClient && mqttClient.connected) {
         const packet = JSON.stringify({ action, payload, senderId: CLIENT_ID });
-        mqttClient.publish(TOPIC_ADMIN, packet);
+        mqttClient.publish(TOPIC_ADMIN, packet, { qos: 1 });
     }
 }
 
@@ -637,11 +710,15 @@ function handleSendMessage(e) {
 
     // Save locally
     messagesList.push(newMessage);
+    if (messagesList.length > 100) messagesList = messagesList.slice(-100);
     localStorage.setItem('hoiquannet_clean_messages', JSON.stringify(messagesList));
     renderMessages();
 
-    // Broadcast across all connected clients
+    // Broadcast message to live users
     broadcastCloudMessage('NEW_MESSAGE', newMessage);
+
+    // Persist full history to Cloud Storage (Retained Message)
+    syncFullHistoryToCloud();
 
     input.value = '';
     playNotifySound();
@@ -674,10 +751,12 @@ function processCommand(cmdText) {
             if (args.trim() === '') {
                 hideNotice();
                 broadcastAdminAction('NOTICE', '');
+                syncFullHistoryToCloud();
                 alert('Đã tắt thông báo ghim!');
             } else {
                 showNotice(args.trim());
                 broadcastAdminAction('NOTICE', args.trim());
+                syncFullHistoryToCloud();
             }
             return true;
 
@@ -715,6 +794,7 @@ function processCommand(cmdText) {
                 messagesList = messagesList.slice(-count);
                 localStorage.setItem('hoiquannet_clean_messages', JSON.stringify(messagesList));
                 renderMessages();
+                syncFullHistoryToCloud();
                 alert(`Đã dọn dẹp và chỉ giữ lại ${count} tin nhắn.`);
             }
             return true;
@@ -744,6 +824,11 @@ function executeClearChat() {
     messagesList = [];
     localStorage.removeItem('hoiquannet_clean_messages');
     renderMessages();
+
+    // Clear on Cloud retained topic and notify everyone
+    if (mqttClient && mqttClient.connected) {
+        mqttClient.publish(TOPIC_HISTORY, JSON.stringify({ messages: [], timestamp: Date.now() }), { retain: true, qos: 1 });
+    }
     broadcastAdminAction('CLEAR_CHAT', null);
     alert('🧹 Đã xóa sạch toàn bộ lịch sử tin nhắn Chatbox thành công!');
 }
@@ -754,6 +839,7 @@ function deleteSingleMessage(id) {
         messagesList = messagesList.filter(m => m.id !== id);
         localStorage.setItem('hoiquannet_clean_messages', JSON.stringify(messagesList));
         renderMessages();
+        syncFullHistoryToCloud();
         broadcastAdminAction('DELETE_MESSAGE', id);
     }
 }
